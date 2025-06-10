@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern File Upload with Previews</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem 0;
+            flex-direction: column;
+        }
+        .container {
+            background-color: #b1d8f0;
+            padding: 2rem 3rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 500px;
+        }
+        h2 {
+            color: #1c1e21;
+            margin-bottom: 1.5rem;
+        }
+        #preview-container {
+            margin-top: 1.5rem;
+            height: 400px;
+            border: 2px dashed #ccd0d5;
+            border-radius: 8px;
+            background-color: #f7f8fa;
+            position: relative;
+            display: flex; /* Menggunakan flex untuk memusatkan pratinjau */
+            justify-content: center;
+            align-items: center;
+        }
+        #pdf-render-area {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+        }
+        #pdf-render-area canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 0 auto 8px; /* Pusatkan canvas dan beri jarak bawah */
+        }
+        #image-preview, 
+        #video-preview {
+            display: none;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain; 
+        }
+        #file-name {
+            color: #606770;
+            margin-top: 10px;
+            font-style: italic;
+        }
+        .form-group { margin-bottom: 1.5rem; }
+        #fileToUpload { display: none; }
+        .file-label { background-color: #e4e6eb; color: #1c1e21; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .file-label:hover { background-color: #d8dbdf; }
+        #submit-btn { background-color: #1877f2; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; }
+        #submit-btn:hover { background-color: #166fe5; }
+        .nav-link { margin-top: 20px; display: inline-block; color: #1877f2; text-decoration: none; font-weight: 500; }
+        #preview-placeholder {
+            color: #8a8d91;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Upload Your File</h2>
+    <p>Select a file and see a preview before uploading.</p>
+    <form action="upload.php" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="fileToUpload" class="file-label">Choose File</label>
+            <input type="file" name="fileToUpload" id="fileToUpload" required>
+            <div id="file-name">No file chosen</div>
+        </div>
+
+        <div id="preview-container">
+             <span id="preview-placeholder">Preview Area</span>
+             <img id="image-preview" alt="Image Preview"/>
+             <video id="video-preview" controls></video>
+             <div id="pdf-render-area"></div>
+        </div>
+        
+        <br>
+        <input type="submit" value="Upload File" name="submit" id="submit-btn">
+    </form>
+     <a href="list.php" class="nav-link">View Uploaded Files →</a>
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileToUpload');
+    const fileNameDisplay = document.getElementById('file-name');
+    const placeholder = document.getElementById('preview-placeholder');
+    const imagePreview = document.getElementById('image-preview');
+    const videoPreview = document.getElementById('video-preview');
+    const pdfRenderArea = document.getElementById('pdf-render-area');
+
+    // Fungsi untuk merender PDF
+    function renderPDF(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = e.target.result;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+            
+            const loadingTask = pdfjsLib.getDocument({ data: data });
+            loadingTask.promise.then(function(pdf) {
+                pdfRenderArea.innerHTML = ''; // Kosongkan area sebelum render
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    pdf.getPage(i).then(function(page) {
+                        const scale = 1.5;
+                        const viewport = page.getViewport({ scale: scale });
+                        
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        pdfRenderArea.appendChild(canvas);
+
+                        page.render({
+                            canvasContext: ctx,
+                            viewport: viewport
+                        });
+                    });
+                }
+            }, function(reason) {
+                console.error(reason);
+                placeholder.textContent = "Error loading PDF preview.";
+                placeholder.style.display = 'block';
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // Event listener saat file dipilih
+    fileInput.addEventListener('change', function() {
+        // Reset tampilan pratinjau
+        imagePreview.style.display = 'none';
+        videoPreview.style.display = 'none';
+        pdfRenderArea.innerHTML = '';
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Preview Area';
+        
+        const file = this.files[0];
+        if (!file) {
+            fileNameDisplay.textContent = 'No file chosen';
+            return;
+        }
+
+        fileNameDisplay.textContent = file.name;
+        placeholder.style.display = 'none'; // Sembunyikan placeholder
+
+        // Menampilkan pratinjau berdasarkan tipe file
+        if (file.type.startsWith('image/')) {
+            imagePreview.src = URL.createObjectURL(file);
+            imagePreview.style.display = 'block';
+        } else if (file.type.startsWith('video/')) {
+            videoPreview.src = URL.createObjectURL(file);
+            videoPreview.style.display = 'block';
+        } else if (file.type === 'application/pdf') {
+            renderPDF(file); // Panggil fungsi render PDF
+        } else {
+            placeholder.textContent = "Preview not available for this file type.";
+            placeholder.style.display = 'block';
+        }
+    });
+</script>
+
+</body>
+</html>
